@@ -27,7 +27,7 @@ namespace Confluent.Kafka.Reactive.Consumer
         private readonly Kafka.IConsumer<TKey, TValue> _consumer;
         private readonly Subject<IEvent> _events;
 
-        public Adapter(ConsumerConfig config, Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> modifier)
+        public Adapter(ConsumerConfig config, Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> modifier = null)
         {
             _consumer = (modifier ?? NullModifier).Invoke(new ConsumerBuilder<TKey, TValue>(config))
                 .SetPartitionsAssignedHandler(PartitionsAssignedHandler)

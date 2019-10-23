@@ -23,11 +23,16 @@ namespace Confluent.Kafka.Reactive.Consumer
             return new Adapter<TKey, TValue>(config, modifier);
         }
 
+        private static IAdapter<TKey, TValue> AdapterFactory(ConsumerConfig config)
+        {
+            return new Adapter<TKey, TValue>(config);
+        }
+
         public Instance(ConsumerConfig config, IScheduler scheduler, Func<ConsumerConfig, IAdapter<TKey, TValue>> adapterFactory)
         {
             _config = config;
-            _scheduler = scheduler;
-            _adapterFactory = adapterFactory;
+            _scheduler = scheduler ?? new EventLoopScheduler();
+            _adapterFactory = adapterFactory ?? AdapterFactory;
 
             _events = new Subject<IEvent>();
             _commands = new Subject<ICommand>();
@@ -37,7 +42,7 @@ namespace Confluent.Kafka.Reactive.Consumer
             );
         }
 
-        public Instance(ConsumerConfig config, Func<ConsumerBuilder<TKey,TValue>, ConsumerBuilder<TKey, TValue>> modifier) : this(config, new EventLoopScheduler(), c => AdapterFactory(c, modifier)) { }
+        public Instance(ConsumerConfig config, Func<ConsumerBuilder<TKey,TValue>, ConsumerBuilder<TKey, TValue>> modifier) : this(config, null, c => AdapterFactory(c, modifier)) { }
 
         public void Dispose()
         {
