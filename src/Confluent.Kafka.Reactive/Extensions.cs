@@ -8,5 +8,10 @@ namespace Confluent.Kafka.Reactive
         {
             return new Consumer.Instance<TKey, TValue>(config, modifiers);
         }
+
+        public static IProducer<TKey, TValue> ToReactiveProducer<TKey, TValue>(this ProducerConfig config, Func<ProducerBuilder<TKey, TValue>, ProducerBuilder<TKey, TValue>> modifiers = null)
+        {
+            return new Producer.Instance<TKey, TValue>(config, modifiers);
+        }
     }
 }
