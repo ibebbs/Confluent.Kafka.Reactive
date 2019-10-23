@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -25,7 +26,7 @@ namespace Confluent.Kafka.Reactive.Producer
         public Instance(ProducerConfig config, IScheduler scheduler, Func<ProducerConfig, IAdapter<TKey, TValue>> adapterFactory)
         {
             _config = config;
-            _scheduler = scheduler;
+            _scheduler = scheduler ?? new EventLoopScheduler();
             _adapterFactory = adapterFactory;
 
             _commands = new Subject<ICommand>();
@@ -34,7 +35,7 @@ namespace Confluent.Kafka.Reactive.Producer
             _connection = new Lazy<ImmediateRefCountDisposable>(() => new ImmediateRefCountDisposable(Start()));
         }
 
-        public Instance(ProducerConfig config, Func<ProducerBuilder<TKey, TValue>, ProducerBuilder<TKey, TValue>> modifier) : this(config, new EventLoopScheduler(), c => AdapterFactory(c, modifier)) { }
+        public Instance(ProducerConfig config, Func<ProducerBuilder<TKey, TValue>, ProducerBuilder<TKey, TValue>> modifier) : this(config, null, c => AdapterFactory(c, modifier)) { }
 
         public void Dispose()
         {
@@ -43,23 +44,23 @@ namespace Confluent.Kafka.Reactive.Producer
             _events.Dispose();
         }
 
-        private static Action<Kafka.IProducer<TKey, TValue>, IObserver<IEvent>> Apply(Command.Produce<TKey, TValue> produce)
+        private Func<IAdapter<TKey, TValue>, IObservable<IEvent>> Apply(Command.Produce<TKey, TValue> produce)
         {
-            return (producer, events) => producer.Produce(produce.Topic, produce.Message, dr => events.OnNext(new Event.Delivered<TKey, TValue>(dr)));
+            return adapter => adapter.Produce(produce, _scheduler);
         }
 
-        private static Action<Kafka.IProducer<TKey, TValue>, IObserver<IEvent>> Apply(Command.Flush flush)
+        private Func<IAdapter<TKey, TValue>, IObservable<IEvent>> Apply(Command.Flush flush)
         {
-            return (producer, events) => producer.Flush(flush.Timeout);
+            return adapter => adapter.Flush(flush, _scheduler);
         }
 
-        private static Action<Kafka.IProducer<TKey, TValue>, IObserver<IEvent>> Apply(ICommand command)
+        private Func<IAdapter<TKey, TValue>, IObservable<IEvent>> Apply(ICommand command)
         {
             switch (command)
             {
                 case Command.Produce<TKey, TValue> produce: return Apply(produce);
                 case Command.Flush flush: return Apply(flush);
-                default: return (producer, events) => { };
+                default: return adapter => Observable.Empty<IEvent>();
             }
         }
 
@@ -72,7 +73,8 @@ namespace Confluent.Kafka.Reactive.Producer
 
             var commandSubscription = _commands
                 .Select(command => Apply(command))
-                .Subscribe(action => adapter.Perform(action, _scheduler));
+                .SelectMany(action => action(adapter))
+                .Subscribe(_events);
 
             return new CompositeDisposable(
                 commandSubscription,

@@ -49,27 +49,27 @@ namespace Confluent.Kafka.Reactive.Consumer
             (_connection.IsValueCreated ? _connection.Value : null)?.Dispose();
         }
 
-        private Func<IAdapter<TKey, TValue>, IObservable<Unit>> Apply(Command.Commit<TKey, TValue> commit)
+        private Func<IAdapter<TKey, TValue>, IObservable<IEvent>> Apply(Command.Commit<TKey, TValue> commit)
         {
             return adapter => adapter.Commit(commit, _scheduler);
         }
 
-        private Func<IAdapter<TKey, TValue>, IObservable<Unit>> Apply(Command.Subscribe subscription)
+        private Func<IAdapter<TKey, TValue>, IObservable<IEvent>> Apply(Command.Subscribe subscription)
         {
             return adapter => adapter.Subscribe(subscription, _scheduler);
         }
 
-        private Func<IAdapter<TKey, TValue>, IObservable<Unit>> Apply(Command.Assign assignment)
+        private Func<IAdapter<TKey, TValue>, IObservable<IEvent>> Apply(Command.Assign assignment)
         {
             return adapter => adapter.Assign(assignment, _scheduler);
         }
 
-        private Func<IAdapter<TKey, TValue>, IObservable<Unit>> Apply(Command.Seek seek)
+        private Func<IAdapter<TKey, TValue>, IObservable<IEvent>> Apply(Command.Seek seek)
         {
             return adapter => adapter.Seek(seek, _scheduler);
         }
 
-        private Func<IAdapter<TKey,TValue>, IObservable<Unit>> Apply(ICommand command)
+        private Func<IAdapter<TKey,TValue>, IObservable<IEvent>> Apply(ICommand command)
         {
             switch (command)
             {
@@ -77,7 +77,7 @@ namespace Confluent.Kafka.Reactive.Consumer
                 case Command.Subscribe subscription: return Apply(subscription);
                 case Command.Assign assign: return Apply(assign);
                 case Command.Seek seek: return Apply(seek);
-                default: return adapter => Observable.Empty<Unit>();
+                default: return adapter => Observable.Empty<IEvent>();
             }
         }
 
@@ -92,7 +92,7 @@ namespace Confluent.Kafka.Reactive.Consumer
                         var commandSubscription = _commands
                             .Select(command => Apply(command))
                             .SelectMany(action => action(adapter))
-                            .Subscribe();
+                            .Subscribe(_events);
 
                         var consumeLoop = Observable
                             .Defer(() => adapter.Consume(TimeSpan.FromMilliseconds(100), _scheduler))

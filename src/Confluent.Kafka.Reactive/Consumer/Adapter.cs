@@ -11,10 +11,10 @@ namespace Confluent.Kafka.Reactive.Consumer
     {
         IObservable<ConsumeResult<TKey, TValue>> Consume(TimeSpan timeout, IScheduler scheduler);
 
-        IObservable<Unit> Seek(Command.Seek seek, IScheduler scheduler);
-        IObservable<Unit> Commit(Command.Commit<TKey, TValue> commit, IScheduler scheduler);
-        IObservable<Unit> Subscribe(Command.Subscribe subscription, IScheduler scheduler);
-        IObservable<Unit> Assign(Command.Assign assignment, IScheduler scheduler);
+        IObservable<IEvent> Seek(Command.Seek seek, IScheduler scheduler);
+        IObservable<IEvent> Commit(Command.Commit<TKey, TValue> commit, IScheduler scheduler);
+        IObservable<IEvent> Subscribe(Command.Subscribe subscription, IScheduler scheduler);
+        IObservable<IEvent> Assign(Command.Assign assignment, IScheduler scheduler);
 
         IObservable<IEvent> Events { get; }
 
@@ -25,6 +25,8 @@ namespace Confluent.Kafka.Reactive.Consumer
         private static readonly Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> NullModifier = cb => cb;
 
         private readonly Kafka.IConsumer<TKey, TValue> _consumer;
+
+        // Asynchronous or unsolicited events are raised through this subject
         private readonly Subject<IEvent> _events;
 
         public Adapter(ConsumerConfig config, Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> modifier = null)
@@ -91,30 +93,40 @@ namespace Confluent.Kafka.Reactive.Consumer
             return Observable.Start(() => _consumer.Consume(timeout), scheduler);
         }
 
-        public IObservable<Unit> Seek(Command.Seek seek, IScheduler scheduler)
+        public IObservable<IEvent> Seek(Command.Seek seek, IScheduler scheduler)
         {
-            return Observable.Start(() => _consumer.Seek(seek.Topic), scheduler);
+            return Observable
+                .Start(() => _consumer.Seek(seek.Topic), scheduler)
+                .SelectMany(_ => Observable.Empty<IEvent>());
         }
 
-        public IObservable<Unit> Commit(Command.Commit<TKey, TValue> commit, IScheduler scheduler)
+        public IObservable<IEvent> Commit(Command.Commit<TKey, TValue> commit, IScheduler scheduler)
         {
-            return Observable.Start(() => _consumer.Commit(commit.ConsumeResult), scheduler);
+            return Observable
+                .Start(() => _consumer.Commit(commit.ConsumeResult), scheduler)
+                .SelectMany(_ => Observable.Empty<IEvent>());
         }
 
-        public IObservable<Unit> Subscribe(Command.Subscribe subscription, IScheduler scheduler)
+        public IObservable<IEvent> Subscribe(Command.Subscribe subscription, IScheduler scheduler)
         {
-            return Observable.Start(() => _consumer.Subscribe(subscription.Topic), scheduler);
+            return Observable
+                .Start(() => _consumer.Subscribe(subscription.Topic), scheduler)
+                .SelectMany(_ => Observable.Empty<IEvent>());
         }
 
-        public IObservable<Unit> Assign(Command.Assign assignment, IScheduler scheduler)
+        public IObservable<IEvent> Assign(Command.Assign assignment, IScheduler scheduler)
         {
             if (assignment.Offset.HasValue)
             {
-                return Observable.Start(() => _consumer.Assign(new TopicPartitionOffset(assignment.Topic, assignment.Offset.Value)), scheduler);
+                return Observable
+                    .Start(() => _consumer.Assign(new TopicPartitionOffset(assignment.Topic, assignment.Offset.Value)), scheduler)
+                    .SelectMany(_ => Observable.Empty<IEvent>());
             }
             else
             {
-                return Observable.Start(() => _consumer.Assign(assignment.Topic), scheduler);
+                return Observable
+                    .Start(() => _consumer.Assign(assignment.Topic), scheduler)
+                    .SelectMany(_ => Observable.Empty<IEvent>());
             }
         }
 
