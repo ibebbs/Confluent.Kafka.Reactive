@@ -8,10 +8,10 @@ using System.Reactive.Disposables;
 namespace Confluent.Kafka.Reactive.Tests.Consumer
 {
     [TestFixture]
-    public class Should
+    public class ShouldManageKafkaConsumerLifetimeBy
     {
         [Test]
-        public void ConstructWrapperWhenConnectIsCalled()
+        public void ConstructingWrapperWhenConnectIsCalled()
         {
             var factory = A.Fake<Func<ConsumerConfig, IWrapper<string, string>>>();
 
@@ -25,7 +25,7 @@ namespace Confluent.Kafka.Reactive.Tests.Consumer
         }
 
         [Test]
-        public void DisposeWrapperWhenConnectDisposableIsDisposed()
+        public void DisposingWrapperWhenConnectDisposableIsDisposed()
         {
             var scheduler = new TestScheduler();
             var wrapper = A.Fake<IWrapper<string, string>>();
@@ -40,7 +40,7 @@ namespace Confluent.Kafka.Reactive.Tests.Consumer
         }
 
         [Test]
-        public void DisposeWrapperWhenAllConnectDisposablesAreDisposed()
+        public void DisposingWrapperWhenAllConnectDisposablesAreDisposed()
         {
             var scheduler = new TestScheduler();
             var wrapper = A.Fake<IWrapper<string, string>>();
@@ -57,7 +57,7 @@ namespace Confluent.Kafka.Reactive.Tests.Consumer
         }
 
         [Test]
-        public void DisposeWrapperWhenConsumerIsDisposed()
+        public void DisposingWrapperWhenConsumerIsDisposed()
         {
             var scheduler = new TestScheduler();
             var wrapper = A.Fake<IWrapper<string, string>>();
