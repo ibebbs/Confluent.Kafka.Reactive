@@ -6,23 +6,23 @@ using System.Reactive.Subjects;
 
 namespace Confluent.Kafka.Reactive.Consumer
 {
-    internal interface IWrapper<TKey, TValue> : IDisposable
+    public interface IAdapter<TKey, TValue> : IDisposable
     {
         IObservable<ConsumeResult<TKey, TValue>> Consume(TimeSpan timeout, IScheduler scheduler);
 
-        IDisposable Perform(Action<Kafka.IConsumer<TKey, TValue>> action, IScheduler scheduler);
+        IDisposable Perform(Action<Kafka.IConsumer<TKey, TValue>, IObserver<IEvent>> action, IScheduler scheduler);
 
         IObservable<IEvent> Events { get; }
     }
 
-    internal class Wrapper<TKey, TValue> : IWrapper<TKey, TValue>
+    internal class Adapter<TKey, TValue> : IAdapter<TKey, TValue>
     {
         private static readonly Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> NullModifier = cb => cb;
 
         private readonly Kafka.IConsumer<TKey, TValue> _consumer;
         private readonly Subject<IEvent> _events;
 
-        public Wrapper(ConsumerConfig config, Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> modifier)
+        public Adapter(ConsumerConfig config, Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> modifier)
         {
             _consumer = (modifier ?? NullModifier).Invoke(new ConsumerBuilder<TKey, TValue>(config))
                 .SetPartitionsAssignedHandler(PartitionsAssignedHandler)
@@ -38,6 +38,7 @@ namespace Confluent.Kafka.Reactive.Consumer
         public void Dispose()
         {
             _consumer.Dispose();
+            _events.Dispose();
         }
 
         private void PartitionsAssignedHandler(Kafka.IConsumer<TKey, TValue> consumer, List<TopicPartition> partitions)
@@ -85,9 +86,9 @@ namespace Confluent.Kafka.Reactive.Consumer
             return Observable.Start(() => _consumer.Consume(timeout), scheduler);
         }
 
-        public IDisposable Perform(Action<Kafka.IConsumer<TKey, TValue>> action, IScheduler scheduler)
+        public IDisposable Perform(Action<Kafka.IConsumer<TKey, TValue>, IObserver<IEvent>> action, IScheduler scheduler)
         {
-            return scheduler.Schedule(() => action(_consumer));
+            return scheduler.Schedule(() => action(_consumer, _events));
         }
 
         public IObservable<IEvent> Events => _events;

@@ -1,27 +1,26 @@
-﻿using Confluent.Kafka.Reactive.Consumer;
+﻿using Confluent.Kafka.Reactive.Producer;
 using FakeItEasy;
 using Microsoft.Reactive.Testing;
 using NUnit.Framework;
 using System;
-using System.Reactive.Disposables;
 
-namespace Confluent.Kafka.Reactive.Tests.Consumer
+namespace Confluent.Kafka.Reactive.Tests.Producer
 {
     [TestFixture]
-    public class ShouldManageKafkaConsumerLifetimeBy
+    public class ShouldManageKafkaProducerLifetimeBy
     {
         [Test]
         public void ConstructingAdapterWhenConnectIsCalled()
         {
-            var factory = A.Fake<Func<ConsumerConfig, IAdapter<string, string>>>();
+            var factory = A.Fake<Func<ProducerConfig, IAdapter<string, string>>>();
 
-            var subject = new Instance<string, string>(new ConsumerConfig(), new TestScheduler(), factory);
+            var subject = new Instance<string, string>(new ProducerConfig(), new TestScheduler(), factory);
 
-            A.CallTo(() => factory.Invoke(A<ConsumerConfig>.Ignored)).MustNotHaveHappened();
+            A.CallTo(() => factory.Invoke(A<ProducerConfig>.Ignored)).MustNotHaveHappened();
 
             subject.Connect();
 
-            A.CallTo(() => factory.Invoke(A<ConsumerConfig>.Ignored)).MustHaveHappenedOnceExactly();
+            A.CallTo(() => factory.Invoke(A<ProducerConfig>.Ignored)).MustHaveHappenedOnceExactly();
         }
 
         [Test]
@@ -30,7 +29,7 @@ namespace Confluent.Kafka.Reactive.Tests.Consumer
             var scheduler = new TestScheduler();
             var adapter = A.Fake<IAdapter<string, string>>();
 
-            var subject = new Instance<string, string>(new ConsumerConfig(), scheduler, config => adapter);
+            var subject = new Instance<string, string>(new ProducerConfig(), scheduler, config => adapter);
 
             var connection = subject.Connect();
 
@@ -45,7 +44,7 @@ namespace Confluent.Kafka.Reactive.Tests.Consumer
             var scheduler = new TestScheduler();
             var adapter = A.Fake<IAdapter<string, string>>();
 
-            var subject = new Instance<string, string>(new ConsumerConfig(), scheduler, config => adapter);
+            var subject = new Instance<string, string>(new ProducerConfig(), scheduler, config => adapter);
 
             var connection1 = subject.Connect();
             var connection2 = subject.Connect();
@@ -62,7 +61,7 @@ namespace Confluent.Kafka.Reactive.Tests.Consumer
             var scheduler = new TestScheduler();
             var adapter = A.Fake<IAdapter<string, string>>();
 
-            var subject = new Instance<string, string>(new ConsumerConfig(), scheduler, config => adapter);
+            var subject = new Instance<string, string>(new ProducerConfig(), scheduler, config => adapter);
             subject.Connect();
             subject.Dispose();
 

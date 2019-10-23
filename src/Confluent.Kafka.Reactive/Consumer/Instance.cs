@@ -12,22 +12,22 @@ namespace Confluent.Kafka.Reactive.Consumer
     {
         private readonly ConsumerConfig _config;
         private readonly IScheduler _scheduler;
-        private readonly Func<ConsumerConfig, IWrapper<TKey, TValue>> _wrapperFactory;
+        private readonly Func<ConsumerConfig, IAdapter<TKey, TValue>> _adapterFactory;
 
         private readonly Subject<IEvent> _events;
         private readonly Subject<ICommand> _commands;
         private readonly Lazy<ImmediateRefCountDisposable> _connection;
 
-        private static IWrapper<TKey, TValue> WrapperFactory(ConsumerConfig config, Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> modifier)
+        private static IAdapter<TKey, TValue> AdapterFactory(ConsumerConfig config, Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> modifier)
         {
-            return new Wrapper<TKey, TValue>(config, modifier);
+            return new Adapter<TKey, TValue>(config, modifier);
         }
 
-        internal Instance(ConsumerConfig config, IScheduler scheduler, Func<ConsumerConfig, IWrapper<TKey, TValue>> wrapperFactory)
+        public Instance(ConsumerConfig config, IScheduler scheduler, Func<ConsumerConfig, IAdapter<TKey, TValue>> adapterFactory)
         {
             _config = config;
             _scheduler = scheduler;
-            _wrapperFactory = wrapperFactory;
+            _adapterFactory = adapterFactory;
 
             _events = new Subject<IEvent>();
             _commands = new Subject<ICommand>();
@@ -37,26 +37,26 @@ namespace Confluent.Kafka.Reactive.Consumer
             );
         }
 
-        public Instance(ConsumerConfig config, Func<ConsumerBuilder<TKey,TValue>, ConsumerBuilder<TKey, TValue>> modifier) : this(config, new EventLoopScheduler(), c => WrapperFactory(c, modifier)) { }
+        public Instance(ConsumerConfig config, Func<ConsumerBuilder<TKey,TValue>, ConsumerBuilder<TKey, TValue>> modifier) : this(config, new EventLoopScheduler(), c => AdapterFactory(c, modifier)) { }
 
         public void Dispose()
         {
             (_connection.IsValueCreated ? _connection.Value : null)?.Dispose();
         }
 
-        private static Action<Kafka.IConsumer<TKey, TValue>> Apply(Command.Commit<TKey, TValue> commit)
+        private static Action<Kafka.IConsumer<TKey, TValue>, IObserver<IEvent>> Apply(Command.Commit<TKey, TValue> commit)
         {
-            return consumer => consumer.Commit(commit.ConsumeResult);
+            return (consumer, events) => consumer.Commit(commit.ConsumeResult);
         }
 
-        private static Action<Kafka.IConsumer<TKey, TValue>> Apply(Command.Subscribe subscription)
+        private static Action<Kafka.IConsumer<TKey, TValue>, IObserver<IEvent>> Apply(Command.Subscribe subscription)
         {
-            return consumer => consumer.Subscribe(subscription.Topic);
+            return (consumer, events) => consumer.Subscribe(subscription.Topic);
         }
 
-        private static Action<Kafka.IConsumer<TKey, TValue>> Apply(Command.Assign assignment)
+        private static Action<Kafka.IConsumer<TKey, TValue>, IObserver<IEvent>> Apply(Command.Assign assignment)
         {
-            return consumer =>
+            return (consumer, events) =>
             {
                 if (assignment.Offset.HasValue)
                 {
@@ -69,12 +69,12 @@ namespace Confluent.Kafka.Reactive.Consumer
             };
         }
 
-        private static Action<Kafka.IConsumer<TKey, TValue>> Apply(Command.Seek seek)
+        private static Action<Kafka.IConsumer<TKey, TValue>, IObserver<IEvent>> Apply(Command.Seek seek)
         {
-            return consumer => consumer.Seek(seek.Topic);
+            return (consumer, events) => consumer.Seek(seek.Topic);
         }
 
-        private static Action<Kafka.IConsumer<TKey, TValue>> Apply(ICommand command)
+        private static Action<Kafka.IConsumer<TKey, TValue>, IObserver<IEvent>> Apply(ICommand command)
         {
             switch (command)
             {
@@ -82,7 +82,7 @@ namespace Confluent.Kafka.Reactive.Consumer
                 case Command.Subscribe subscription: return Apply(subscription);
                 case Command.Assign assign: return Apply(assign);
                 case Command.Seek seek: return Apply(seek);
-                default: return consumer => { };
+                default: return (consumer, events) => { };
             }
         }
 
@@ -92,14 +92,14 @@ namespace Confluent.Kafka.Reactive.Consumer
                 .Create<IEvent>(
                     observer =>
                     {
-                        var wrapper = _wrapperFactory(_config);
+                        var adapter = _adapterFactory(_config);
 
                         var commandSubscription = _commands
                             .Select(command => Apply(command))
-                            .Subscribe(action => wrapper.Perform(action, _scheduler));
+                            .Subscribe(action => adapter.Perform(action, _scheduler));
 
                         var consumeLoop = Observable
-                            .Defer(() => wrapper.Consume(TimeSpan.FromMilliseconds(100), _scheduler))
+                            .Defer(() => adapter.Consume(TimeSpan.FromMilliseconds(100), _scheduler))
                             .Repeat()
                             .Where(consumeResult => consumeResult != null)
                             .Publish();
@@ -113,15 +113,14 @@ namespace Confluent.Kafka.Reactive.Consumer
                             .Select(consumeResult => new Event.EndOfPartition(consumeResult.Topic, consumeResult.Partition, consumeResult.Offset));
 
                         var consumeSubscription = Observable
-                            .Merge(wrapper.Events, messageReceived, endOfPartition)
+                            .Merge(adapter.Events, messageReceived, endOfPartition)
                             .Subscribe(Observer.Synchronize(observer));
 
                         return new CompositeDisposable(
                             consumeLoop.Connect(),
                             consumeSubscription,
                             commandSubscription,
-                            Disposable.Create(() => System.Diagnostics.Debugger.Break()),
-                            wrapper
+                            adapter
                         );
                     })
                 .Subscribe(_events);
