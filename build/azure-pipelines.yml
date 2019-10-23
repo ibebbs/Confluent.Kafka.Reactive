@@ -1,19 +1,23 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
 - master
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'ubuntu-16.04'
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+  version: 1.0.0
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
-
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+- script: dotnet restore src/
+- script: dotnet build src/
+# should now be done by build due to project setting 
+# - script: dotnet pack /p:PackageVersion=$(version)
+- task: NuGetCommand@2
+  inputs:
+    command: push
+    nuGetFeedType: external
+    packagesToPush: '$(Build.Repository.LocalPath)/**/*.nupkg;!$(Build.Repository.LocalPath)/**/*.symbols.nupkg'
+    publishFeedCredentials: 'MyGet Bebbs Feed'
