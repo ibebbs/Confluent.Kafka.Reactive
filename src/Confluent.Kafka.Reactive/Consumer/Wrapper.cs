@@ -17,12 +17,14 @@ namespace Confluent.Kafka.Reactive.Consumer
 
     internal class Wrapper<TKey, TValue> : IWrapper<TKey, TValue>
     {
+        private static readonly Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> NullModifier = cb => cb;
+
         private readonly Kafka.IConsumer<TKey, TValue> _consumer;
         private readonly Subject<IEvent> _events;
 
-        public Wrapper(ConsumerConfig config)
+        public Wrapper(ConsumerConfig config, Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> modifier)
         {
-            _consumer = new ConsumerBuilder<TKey, TValue>(config)
+            _consumer = (modifier ?? NullModifier).Invoke(new ConsumerBuilder<TKey, TValue>(config))
                 .SetPartitionsAssignedHandler(PartitionsAssignedHandler)
                 .SetPartitionsRevokedHandler(PartitionsRevokedHandler)
                 .SetOffsetsCommittedHandler(OffsetsCommittedHandler)
@@ -40,27 +42,42 @@ namespace Confluent.Kafka.Reactive.Consumer
 
         private void PartitionsAssignedHandler(Kafka.IConsumer<TKey, TValue> consumer, List<TopicPartition> partitions)
         {
-            _events.OnNext(new Event.PartitionsAssigned(partitions));
+            if (consumer.Equals(_consumer))
+            {
+                _events.OnNext(new Event.PartitionsAssigned(partitions));
+            }
         }
 
         private void PartitionsRevokedHandler(Kafka.IConsumer<TKey, TValue> consumer, List<TopicPartitionOffset> partitions)
         {
-            _events.OnNext(new Event.PartitionsRevoked(partitions));
+            if (consumer.Equals(_consumer))
+            {
+                _events.OnNext(new Event.PartitionsRevoked(partitions));
+            }
         }
 
         private void OffsetsCommittedHandler(Kafka.IConsumer<TKey, TValue> consumer, CommittedOffsets committedOffsets)
         {
-            _events.OnNext(new Event.OffsetsCommitted(committedOffsets));
+            if (consumer.Equals(_consumer))
+            {
+                _events.OnNext(new Event.OffsetsCommitted(committedOffsets));
+            }
         }
 
         private void StatisticsHandler(Kafka.IConsumer<TKey, TValue> consumer, string statistics)
         {
-            _events.OnNext(new Event.StatisticsReceived(statistics));
+            if (consumer.Equals(_consumer))
+            {
+                _events.OnNext(new Event.StatisticsReceived(statistics));
+            }
         }
 
         private void LogMessageHandler(Kafka.IConsumer<TKey, TValue> consumer, LogMessage logMessage)
         {
-            _events.OnNext(new Event.LogMessageReceived(logMessage));
+            if (consumer.Equals(_consumer))
+            {
+                _events.OnNext(new Event.LogMessageReceived(logMessage));
+            }
         }
 
         public IObservable<ConsumeResult<TKey, TValue>> Consume(TimeSpan timeout, IScheduler scheduler)

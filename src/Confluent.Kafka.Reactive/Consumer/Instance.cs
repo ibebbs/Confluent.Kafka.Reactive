@@ -18,9 +18,9 @@ namespace Confluent.Kafka.Reactive.Consumer
         private readonly Subject<ICommand> _commands;
         private readonly Lazy<ImmediateRefCountDisposable> _connection;
 
-        private static IWrapper<TKey, TValue> WrapperFactory(ConsumerConfig config)
+        private static IWrapper<TKey, TValue> WrapperFactory(ConsumerConfig config, Func<ConsumerBuilder<TKey, TValue>, ConsumerBuilder<TKey, TValue>> modifier)
         {
-            return new Wrapper<TKey, TValue>(config);
+            return new Wrapper<TKey, TValue>(config, modifier);
         }
 
         internal Instance(ConsumerConfig config, IScheduler scheduler, Func<ConsumerConfig, IWrapper<TKey, TValue>> wrapperFactory)
@@ -37,12 +37,12 @@ namespace Confluent.Kafka.Reactive.Consumer
             );
         }
 
+        public Instance(ConsumerConfig config, Func<ConsumerBuilder<TKey,TValue>, ConsumerBuilder<TKey, TValue>> modifier) : this(config, new EventLoopScheduler(), c => WrapperFactory(c, modifier)) { }
+
         public void Dispose()
         {
             (_connection.IsValueCreated ? _connection.Value : null)?.Dispose();
         }
-
-        public Instance(ConsumerConfig config) : this(config, new EventLoopScheduler(), WrapperFactory) { }
 
         private static Action<Kafka.IConsumer<TKey, TValue>> Apply(Command.Commit<TKey, TValue> commit)
         {
