@@ -9,33 +9,34 @@ namespace Confluent.Kafka.Reactive.Consumer
 {
     internal class Instance<TKey, TValue> : IConsumer<TKey,TValue>
     {
-        private readonly ConsumerBuilder<TKey, TValue> _consumerBuilder;
-        private readonly Func<ConsumerBuilder<TKey, TValue>, Kafka.IConsumer<TKey, TValue>> _consumerFactory;
+        private readonly ConsumerConfig _config;
         private readonly IScheduler _scheduler;
+        private readonly Func<ConsumerConfig, IWrapper<TKey, TValue>> _wrapperFactory;
+
         private readonly Subject<IEvent> _events;
         private readonly Subject<ICommand> _commands;
         private readonly Lazy<RefCountDisposable> _connection;
 
-        public Instance(ConsumerConfig config, IScheduler scheduler = null, Func<ConsumerBuilder<TKey, TValue>, Kafka.IConsumer<TKey, TValue>> consumerFactory = null)
+        private static IWrapper<TKey, TValue> WrapperFactory(ConsumerConfig config)
         {
-            _scheduler = scheduler ?? new EventLoopScheduler();
+            return new Wrapper<TKey, TValue>(config);
+        }
+
+        internal Instance(ConsumerConfig config, IScheduler scheduler, Func<ConsumerConfig, IWrapper<TKey, TValue>> wrapperFactory)
+        {
+            _config = config;
+            _scheduler = scheduler;
+            _wrapperFactory = wrapperFactory;
 
             _events = new Subject<IEvent>();
             _commands = new Subject<ICommand>();
-
-            _consumerBuilder = new ConsumerBuilder<TKey, TValue>(config)
-                .SetPartitionsAssignedHandler(PartitionsAssignedHandler)
-                .SetPartitionsRevokedHandler(PartitionsRevokedHandler)
-                .SetOffsetsCommittedHandler(OffsetsCommittedHandler)
-                .SetStatisticsHandler(StatisticsHandler)
-                .SetLogHandler(LogMessageHandler);
-
-            _consumerFactory = consumerFactory ?? new Func<ConsumerBuilder<TKey, TValue>, Kafka.IConsumer<TKey, TValue>>(builder => builder.Build());
 
             _connection = new Lazy<RefCountDisposable>(
                 () => new RefCountDisposable(CreateObservable().Subscribe(_events))
             );
         }
+
+        public Instance(ConsumerConfig config) : this(config, new EventLoopScheduler(), WrapperFactory) { }
 
         private static Action<Kafka.IConsumer<TKey, TValue>> Apply(Command.Commit<TKey, TValue> commit)
         {
@@ -84,16 +85,17 @@ namespace Confluent.Kafka.Reactive.Consumer
             return Observable.Create<IEvent>(
                 observer =>
                 {
-                    var consumer = _consumerFactory(_consumerBuilder);
+                    var wrapper = _wrapperFactory(_config);
 
-                    var commitSubscription = _commands
+                    var eventSubscription = wrapper.Events
+                        .Subscribe(_events);
+
+                    var commandSubscription = _commands
                         .Select(command => Apply(command))
-                        .ObserveOn(_scheduler)
-                        .Subscribe(action => action(consumer));
+                        .Subscribe(action => wrapper.Perform(action, _scheduler));
 
                     var consumeLoop = Observable
-                        .Defer(() => Observable
-                            .Start(() => consumer.Consume(TimeSpan.FromMilliseconds(100)), _scheduler))
+                        .Defer(() => wrapper.Consume(TimeSpan.FromMilliseconds(100), _scheduler))
                         .Repeat()
                         .Where(consumeResult => consumeResult != null)
                         .Publish();
@@ -111,36 +113,12 @@ namespace Confluent.Kafka.Reactive.Consumer
                     return new CompositeDisposable(
                         consumeLoop.Connect(),
                         consumeSubscription,
-                        commitSubscription,
-                        consumer
+                        commandSubscription,
+                        eventSubscription,
+                        wrapper
                     );
                 }
             );
-        }
-
-        private void PartitionsAssignedHandler(Kafka.IConsumer<TKey, TValue> consumer, List<TopicPartition> partitions)
-        {
-            _events.OnNext(new Event.PartitionsAssigned(partitions));
-        }
-
-        private void PartitionsRevokedHandler(Kafka.IConsumer<TKey, TValue> consumer, List<TopicPartitionOffset> partitions)
-        {
-            _events.OnNext(new Event.PartitionsRevoked(partitions));
-        }
-
-        private void OffsetsCommittedHandler(Kafka.IConsumer<TKey, TValue> consumer, CommittedOffsets committedOffsets)
-        {
-            _events.OnNext(new Event.OffsetsCommitted(committedOffsets));
-        }
-
-        private void StatisticsHandler(Kafka.IConsumer<TKey, TValue> consumer, string statistics)
-        {
-            _events.OnNext(new Event.StatisticsReceived(statistics));
-        }
-
-        private void LogMessageHandler(Kafka.IConsumer<TKey, TValue> consumer, LogMessage logMessage)
-        {
-            _events.OnNext(new Event.LogMessageReceived(logMessage));
         }
 
         void IObserver<ICommand>.OnCompleted()
