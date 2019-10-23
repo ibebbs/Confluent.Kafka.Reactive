@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -15,7 +16,7 @@ namespace Confluent.Kafka.Reactive.Consumer
 
         private readonly Subject<IEvent> _events;
         private readonly Subject<ICommand> _commands;
-        private readonly Lazy<RefCountDisposable> _connection;
+        private readonly Lazy<ImmediateRefCountDisposable> _connection;
 
         private static IWrapper<TKey, TValue> WrapperFactory(ConsumerConfig config)
         {
@@ -31,9 +32,14 @@ namespace Confluent.Kafka.Reactive.Consumer
             _events = new Subject<IEvent>();
             _commands = new Subject<ICommand>();
 
-            _connection = new Lazy<RefCountDisposable>(
-                () => new RefCountDisposable(CreateObservable().Subscribe(_events))
+            _connection = new Lazy<ImmediateRefCountDisposable>(
+                () => new ImmediateRefCountDisposable(Start())
             );
+        }
+
+        public void Dispose()
+        {
+            (_connection.IsValueCreated ? _connection.Value : null)?.Dispose();
         }
 
         public Instance(ConsumerConfig config) : this(config, new EventLoopScheduler(), WrapperFactory) { }
@@ -80,45 +86,45 @@ namespace Confluent.Kafka.Reactive.Consumer
             }
         }
 
-        private IObservable<IEvent> CreateObservable()
+        private IDisposable Start()
         {
-            return Observable.Create<IEvent>(
-                observer =>
-                {
-                    var wrapper = _wrapperFactory(_config);
+            return Observable
+                .Create<IEvent>(
+                    observer =>
+                    {
+                        var wrapper = _wrapperFactory(_config);
 
-                    var eventSubscription = wrapper.Events
-                        .Subscribe(_events);
+                        var commandSubscription = _commands
+                            .Select(command => Apply(command))
+                            .Subscribe(action => wrapper.Perform(action, _scheduler));
 
-                    var commandSubscription = _commands
-                        .Select(command => Apply(command))
-                        .Subscribe(action => wrapper.Perform(action, _scheduler));
+                        var consumeLoop = Observable
+                            .Defer(() => wrapper.Consume(TimeSpan.FromMilliseconds(100), _scheduler))
+                            .Repeat()
+                            .Where(consumeResult => consumeResult != null)
+                            .Publish();
 
-                    var consumeLoop = Observable
-                        .Defer(() => wrapper.Consume(TimeSpan.FromMilliseconds(100), _scheduler))
-                        .Repeat()
-                        .Where(consumeResult => consumeResult != null)
-                        .Publish();
+                        var messageReceived = consumeLoop
+                            .Where(consumeResult => !consumeResult.IsPartitionEOF)
+                            .Select(consumeResult => new Event.MessageReceived<TKey, TValue>(consumeResult));
 
-                    var messageReceived = consumeLoop
-                        .Where(consumeResult => !consumeResult.IsPartitionEOF)
-                        .Select(consumeResult => new Event.MessageReceived<TKey, TValue>(consumeResult));
+                        var endOfPartition = consumeLoop
+                            .Where(consumeResult => consumeResult.IsPartitionEOF)
+                            .Select(consumeResult => new Event.EndOfPartition(consumeResult.Topic, consumeResult.Partition, consumeResult.Offset));
 
-                    var endOfPartition = consumeLoop
-                        .Where(consumeResult => consumeResult.IsPartitionEOF)
-                        .Select(consumeResult => new Event.EndOfPartition(consumeResult.Topic, consumeResult.Partition, consumeResult.Offset));
+                        var consumeSubscription = Observable
+                            .Merge(wrapper.Events, messageReceived, endOfPartition)
+                            .Subscribe(Observer.Synchronize(observer));
 
-                    var consumeSubscription = Observable.Merge<IEvent>(messageReceived, endOfPartition).Subscribe(observer);
-
-                    return new CompositeDisposable(
-                        consumeLoop.Connect(),
-                        consumeSubscription,
-                        commandSubscription,
-                        eventSubscription,
-                        wrapper
-                    );
-                }
-            );
+                        return new CompositeDisposable(
+                            consumeLoop.Connect(),
+                            consumeSubscription,
+                            commandSubscription,
+                            Disposable.Create(() => System.Diagnostics.Debugger.Break()),
+                            wrapper
+                        );
+                    })
+                .Subscribe(_events);
         }
 
         void IObserver<ICommand>.OnCompleted()
