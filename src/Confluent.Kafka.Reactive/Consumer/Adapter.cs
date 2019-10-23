@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
@@ -10,9 +11,13 @@ namespace Confluent.Kafka.Reactive.Consumer
     {
         IObservable<ConsumeResult<TKey, TValue>> Consume(TimeSpan timeout, IScheduler scheduler);
 
-        IDisposable Perform(Action<Kafka.IConsumer<TKey, TValue>, IObserver<IEvent>> action, IScheduler scheduler);
+        IObservable<Unit> Seek(Command.Seek seek, IScheduler scheduler);
+        IObservable<Unit> Commit(Command.Commit<TKey, TValue> commit, IScheduler scheduler);
+        IObservable<Unit> Subscribe(Command.Subscribe subscription, IScheduler scheduler);
+        IObservable<Unit> Assign(Command.Assign assignment, IScheduler scheduler);
 
         IObservable<IEvent> Events { get; }
+
     }
 
     internal class Adapter<TKey, TValue> : IAdapter<TKey, TValue>
@@ -86,9 +91,31 @@ namespace Confluent.Kafka.Reactive.Consumer
             return Observable.Start(() => _consumer.Consume(timeout), scheduler);
         }
 
-        public IDisposable Perform(Action<Kafka.IConsumer<TKey, TValue>, IObserver<IEvent>> action, IScheduler scheduler)
+        public IObservable<Unit> Seek(Command.Seek seek, IScheduler scheduler)
         {
-            return scheduler.Schedule(() => action(_consumer, _events));
+            return Observable.Start(() => _consumer.Seek(seek.Topic), scheduler);
+        }
+
+        public IObservable<Unit> Commit(Command.Commit<TKey, TValue> commit, IScheduler scheduler)
+        {
+            return Observable.Start(() => _consumer.Commit(commit.ConsumeResult), scheduler);
+        }
+
+        public IObservable<Unit> Subscribe(Command.Subscribe subscription, IScheduler scheduler)
+        {
+            return Observable.Start(() => _consumer.Subscribe(subscription.Topic), scheduler);
+        }
+
+        public IObservable<Unit> Assign(Command.Assign assignment, IScheduler scheduler)
+        {
+            if (assignment.Offset.HasValue)
+            {
+                return Observable.Start(() => _consumer.Assign(new TopicPartitionOffset(assignment.Topic, assignment.Offset.Value)), scheduler);
+            }
+            else
+            {
+                return Observable.Start(() => _consumer.Assign(assignment.Topic), scheduler);
+            }
         }
 
         public IObservable<IEvent> Events => _events;
