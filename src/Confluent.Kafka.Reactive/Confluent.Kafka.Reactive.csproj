@@ -6,6 +6,8 @@
     <Authors>ibebbs</Authors>
     <Company>bebbs</Company>
     <Description>A wrapper for Confluent.Kafka which utilises System.Reactive to simplify interaction and homogenise with Kafka</Description>
+    <PackageProjectUrl>https://github.com/ibebbs/Confluent.Kafka.Reactive</PackageProjectUrl>
+    <PackageTags>kafka reactive</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
