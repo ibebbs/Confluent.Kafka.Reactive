@@ -2,7 +2,7 @@
 
 namespace Confluent.Kafka.Reactive
 {
-    public interface IProducer<TKey, TValue>
+    public interface IProducer<TKey, TValue> : IDisposable
     {
         IDisposable Connect();
 

@@ -22,6 +22,11 @@ namespace Confluent.Kafka.Reactive.Producer
             _connection = new Lazy<ImmediateRefCountDisposable>(() => new ImmediateRefCountDisposable(Subscribe()));
         }
 
+        public void Dispose()
+        {
+            (_connection.IsValueCreated ? _connection.Value : null)?.Dispose();
+        }
+
         private IDisposable Subscribe()
         {
             var producer = _modifier(new ProducerBuilder<TKey, TValue>(_config)).Build();
