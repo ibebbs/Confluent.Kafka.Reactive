@@ -4,7 +4,7 @@ using System.Threading;
 namespace Confluent.Kafka.Reactive.Consumer
 {
     [EventSource(Name = "Confluent-Kafka-Reactive-Consumer")]
-    public class Log : EventSource
+    public sealed class Log : EventSource
     {
         public static readonly Log Event = new Log();
 
@@ -25,7 +25,7 @@ namespace Confluent.Kafka.Reactive.Consumer
             Interlocked.Increment(ref _partionCount);
             _partitionsAssigned.WriteMetric(_partionCount);
 
-            if (IsEnabled(EventLevel.Informational, EventKeywords.All))
+            if (IsEnabled(EventLevel.Informational, EventKeywords.None))
             {
                 WriteEvent(1, topic, partition);
             }
@@ -37,7 +37,7 @@ namespace Confluent.Kafka.Reactive.Consumer
             Interlocked.Decrement(ref _partionCount);
             _partitionsAssigned.WriteMetric(_partionCount);
 
-            if (IsEnabled(EventLevel.Informational, EventKeywords.All))
+            if (IsEnabled(EventLevel.Informational, EventKeywords.None))
             {
                 WriteEvent(2, topic, partition);
             }
@@ -46,7 +46,7 @@ namespace Confluent.Kafka.Reactive.Consumer
         [Event(3, Message = "End of partition '{1}' of topic '{0}' at '{2}'")]
         public void EndOfPartition(string topic, int partition, long at)
         {
-            if (IsEnabled(EventLevel.Informational, EventKeywords.All))
+            if (IsEnabled(EventLevel.Informational, EventKeywords.None))
             {
                 WriteEvent(3, topic, partition, at);
             }
@@ -55,7 +55,7 @@ namespace Confluent.Kafka.Reactive.Consumer
         [Event(4, Message = "Offsets committed for partition '{1}' of topic '{0}' at '{2}'")]
         public void OffsetsCommitted(string topic, int partition, long at)
         {
-            if (IsEnabled(EventLevel.Informational, EventKeywords.All))
+            if (IsEnabled(EventLevel.Informational, EventKeywords.None))
             {
                 WriteEvent(4, topic, partition, at);
             }
@@ -66,7 +66,7 @@ namespace Confluent.Kafka.Reactive.Consumer
         {
             _messagesReceived.Increment();
 
-            if (IsEnabled(EventLevel.Verbose, EventKeywords.All))
+            if (IsEnabled(EventLevel.Verbose, EventKeywords.None))
             {
                 WriteEvent(5, topic, partition, at);
             }
