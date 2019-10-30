@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>netstandard2.1</TargetFramework>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Authors>ibebbs</Authors>
     <Company>bebbs</Company>
     <Description>A wrapper for Confluent.Kafka which utilises System.Reactive to simplify interaction and homogenise with Kafka</Description>
     <PackageProjectUrl>https://github.com/ibebbs/Confluent.Kafka.Reactive</PackageProjectUrl>
     <PackageTags>kafka reactive</PackageTags>
-    <Version>1.0.1-alpha7</Version>
+    <Version>1.0.1-alpha8</Version>
   </PropertyGroup>
 
   <ItemGroup>

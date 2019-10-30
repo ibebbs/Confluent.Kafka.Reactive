@@ -110,6 +110,7 @@ namespace Confluent.Kafka.Reactive.Consumer
 
                         var consumeSubscription = Observable
                             .Merge(adapter.Events, messageReceived, endOfPartition)
+                            .Do(@event => @event.Log<TKey,TValue>())
                             .Subscribe(Observer.Synchronize(observer));
 
                         return new CompositeDisposable(
